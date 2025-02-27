@@ -4,7 +4,7 @@ library(reshape2)
 library(ggplot2)
 library(ggtext)
 
-## 1. calculate gene FPKM and TPM ####
+## 1. calculate gene FPKM ####
 library(GenomicFeatures)
 
 # load read count matrix
