@@ -12,5 +12,5 @@ U5/
 ├── Polysome_seq/                # Polysome profiling data processing 
 ├── Proteome/                    # TMT-labeled proteomics pipeline 
 ├── IntegratedAnalysis/          # Multi-omics integration 
-├── Figures						 # Figures generated in this project
+├── Figures/                     # Figures generated in this project
 ```
