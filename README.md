@@ -7,10 +7,11 @@ Each module is designed for reproducibility and includes detailed documentation.
 
 ```
 U5/
-├── Subcellular_RNAseq/          # Subcellular fractionation RNA-seq analysis 
-├── DTL24h_mRNAseq/              # mRNA-seq analysis of genetic mutants 
-├── Polysome_seq/                # Polysome profiling data processing 
-├── Proteome/                    # TMT-labeled proteomics pipeline 
-├── IntegratedAnalysis/          # Multi-omics integration 
-├── Figures/                     # Figures generated in this project
+├── 1_Subcellular_RNAseq/          # Subcellular fractionation RNA-seq analysis 
+├── 2_DTL24h_mRNAseq/              # mRNA-seq analysis of genetic mutants 
+├── 3_Polysome_seq/                # Polysome profiling data processing 
+├── 4_Proteome/                    # TMT-labeled proteomics pipeline
+├── 5_UBE_analysis/                # U5 snRNA binding element analysis
+├── 6_IntegratedAnalysis/          # Multi-omics integration 
+├── 7_Figures/                     # Figures generated in this project
 ```
