@@ -1,1 +1,3 @@
+## U5 snRNA binding element (UBE) analysis
 
+For genome annotation, the Araport11 database was utilized for *Arabidopsis thaliana*, while the *Oryza sativa* v7.0 and *Physcomitrium patens* v3.3 annotations from Phytozome were employed for rice and moss, respectively. We segmented the U5 sequence into 12-bp bins with a 1-bp sliding window. These fragmented sequences were then aligned to the 3' UTR regions of mRNAs using the Bowtie software, allowing for up to three mismatches with the parameters set as "-v 3 -a --best --nofw". During the subsequent filtering process, only results that included the complementary sequence to the U5 Sm site core motif "AUUUUUG" were retained. 
