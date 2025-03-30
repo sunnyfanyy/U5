@@ -1,26 +1,141 @@
 library(openxlsx)
 library(stringr)
 library(dplyr)
+library(ggplot2)
 library(ComplexHeatmap)
+
+##  Histogram: RNAseq and Proteome in u5 mutants, Figure3A ####
+# DTL24h RNAseq
+rna <- read.xlsx("../2_DTL24h_mRNAseq/DTL24h_WT_u5.merged_info.xlsx")
+
+# TMT-based proteome results
+prot <- read.xlsx("../4_Proteome/DTL24h_TMT_proteome.xlsx")
+rna_prot <- inner_join(prot[,c("Gene.ID","Avg.24h.WT","Avg.24h.u5","DTL24h.u5/WT","t.test_24h.p")], 
+                       rna[,c(1:5)], by="Gene.ID") # 8636
+rna_prot.uniq <- rna_prot[!duplicated(rna_prot$Gene.ID), ] # 8620
+
+rna_prot.keep <- subset(rna_prot.uniq, (FPKM.DTL24h.WT > 0 | FPKM.DTL24h.u5 > 0) & 
+                          `t.test_24h.p` < 0.05 & !is.na(rna_prot.uniq$`DTL24h.u5/WT`)) # 3129
+
+# RNA average and variance
+mean(rna_prot.keep$DTL24h.u5_WT.FC) # 0.0161
+sd(rna_prot.keep$DTL24h.u5_WT.FC) # 0.313
+# Proteome average and variance
+mean(log2(rna_prot.keep$`DTL24h.u5/WT`), na.rm = T) # 0.0941
+sd(log2(rna_prot.keep$`DTL24h.u5/WT`)) # 0.636
+
+rna_prot.keep$log2ProFC <- log2(rna_prot.keep$`DTL24h.u5/WT`)
+
+ggplot()+geom_histogram(data = rna_prot.keep,aes(x=DTL24h.u5_WT.FC),stat = 'bin',bins = 100,fill='#4f81bd',color='white',alpha=0.7)+
+  geom_smooth(data = rna_prot.keep,aes(x=DTL24h.u5_WT.FC),stat = 'bin',color='#4f81bd',bins = 100,size=0.6)+
+  geom_histogram(data = rna_prot.keep,aes(x=log2ProFC),stat = 'bin',bins = 100,fill='#c0504d',color='white',alpha=0.5)+
+  geom_smooth(data = rna_prot.keep,aes(x=log2ProFC),stat = 'bin',color='#c0504d',bins = 100,size=0.6)+
+  scale_x_continuous(expand = c(0, 0),limits = c(-1.5,1.5)) +scale_y_continuous(expand = c(0, 0),limits = c(0,250))+
+  xlab(expression(log[2]*"FC"))+ylab("Number of genes") +
+  theme_classic() + theme(axis.text = element_text(color = 'black'))
+
+#ggsave("Figure3A.pdf",width = 8, height = 8, units = "cm")
+
+##  Histogram: RNAseq and TE in u5 mutants, Figure3B ####
+# Translation efficiency
+FPKM.s.TE <- read.xlsx("../3_Polysome_seq/PolysomeSeq_TE_info.xlsx")
+colnames(FPKM.s.TE)
+
+rna_TE <- inner_join(FPKM.s.TE[,1:23], 
+                     rna[,c(1:5)], by="Gene.ID") # 29538
+subset(rna_TE, Gene.ID %in% c("atU1-4", "atU1-6"))
+
+#保留TE pvalue < 0.05 并且 FPKM任一sample > 0 的基因
+rna_TE.sig <- subset(rna_TE, pvalue < 0.05 & 
+                       (FPKM.DTL24h.WT > 0 | FPKM.DTL24h.u5 > 0)) # 2725
+#去除Polysome-seq中3个及以上sample（共12个sample）的FPKM值为0的基因。
+rna_TE.keep <- rna_TE.sig[which(rowSums(rna_TE.sig[,2:13]==0) < 3),]  # 2673
+
+ggplot()+geom_histogram(data = rna_TE.keep,aes(x=DTL24h.u5_WT.FC),stat = 'bin',bins = 100,fill='#4f81bd',color='white',alpha=0.7)+
+  geom_smooth(data = rna_TE.keep,aes(x=DTL24h.u5_WT.FC),stat = 'bin',color='#4f81bd',bins = 100,size=0.6)+
+  geom_histogram(data = rna_TE.keep,aes(x=log2FC_TE.u5_WT),stat = 'bin',bins = 100,fill='#c0504d',color='white',alpha=0.5)+
+  geom_smooth(data = rna_TE.keep,aes(x=log2FC_TE.u5_WT),stat = 'bin',color='#c0504d',bins = 100,size=0.6)+
+  scale_x_continuous(expand = c(0, 0),limits = c(-2.5,2.5)) +scale_y_continuous(expand = c(0, 0),limits = c(0,350))+
+  xlab(expression(log[2]*"FC"))+ylab("Number of genes") +
+  theme_classic() + theme(axis.text = element_text(color = 'black'))
+
+#ggsave("Figure3B.pdf",width = 8, height = 8, units = "cm")
+
+#TE: up-regulated and down-regulated
+rna_TE.keep.up <- subset(rna_TE.keep, log2FC_TE.u5_WT > 0) # 747
+rna_TE.keep.dn <- subset(rna_TE.keep, log2FC_TE.u5_WT < 0) #1926
+
+
+# RNA average and variance
+mean(rna_TE.keep$DTL24h.u5_WT.FC) # 0.026
+sd(rna_TE.keep$DTL24h.u5_WT.FC) # 0.318
+# TE average and variance
+mean(rna_TE.keep$log2FC_TE.u5_WT, na.rm = T) # -0.2229
+sd(rna_TE.keep$log2FC_TE.u5_WT, na.rm = T) # 0.6625
+
+## dotplot: upregulated and downregulated TE genes in u5 mutants, Figure3C ####
+# 将B图中的2673个基因分为RS上下调和TE上下调的组合。
+# RNAseq criteria: abs(log2FC) > log2(1.5) & p < 0.05
+# TE criteria：abs(log2FC) >= 0.5 & p < 0.05
+rna_TE.keep1 <- rna_TE.keep[,c(1, 22:23, 26:27)] # 2673
+
+rna_TE.keep1.TE.sig <- subset(rna_TE.keep1, abs(log2FC_TE.u5_WT) >= 0.5 & pvalue < 0.05) # 956
+
+rna_TE.keep1.TE.up <- subset(rna_TE.keep1.TE.sig, log2FC_TE.u5_WT >= 0.5 ) # 284
+rna_TE.keep1.TE.dn <- subset(rna_TE.keep1.TE.sig, log2FC_TE.u5_WT <= -0.5 ) #672
+
+rna_TE.keep1.rna.up <- subset(rna_TE.keep1.TE.sig, DTL24h.u5_WT.FC > log2(1.5) & DTL24h.u5_WT.p < 0.05) # 18
+rna_TE.keep1.rna.dn <- subset(rna_TE.keep1.TE.sig, DTL24h.u5_WT.FC < -log2(1.5) & DTL24h.u5_WT.p < 0.05) # 24
+rna_TE.keep1.rna.ns <- subset(rna_TE.keep1.TE.sig, abs(DTL24h.u5_WT.FC) < log2(1.5) | DTL24h.u5_WT.p > 0.05) # 914
+
+rna_TE.keep1.TE.sig$type[rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.TE.dn$Gene.ID &
+                           rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.rna.dn$Gene.ID] <- "TE_down.RS_down"
+rna_TE.keep1.TE.sig$type[rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.TE.dn$Gene.ID &
+                           rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.rna.up$Gene.ID] <- "TE_down.RS_up"
+rna_TE.keep1.TE.sig$type[rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.TE.dn$Gene.ID &
+                           rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.rna.ns$Gene.ID] <- "TE_down.RS_nc"
+
+rna_TE.keep1.TE.sig$type[rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.TE.up$Gene.ID &
+                           rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.rna.dn$Gene.ID] <- "TE_up.RS_down"
+rna_TE.keep1.TE.sig$type[rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.TE.up$Gene.ID &
+                           rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.rna.up$Gene.ID] <- "TE_up.RS_up"
+rna_TE.keep1.TE.sig$type[rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.TE.up$Gene.ID &
+                           rna_TE.keep1.TE.sig$Gene.ID %in% rna_TE.keep1.rna.ns$Gene.ID] <- "TE_up.RS_nc"
+
+table(rna_TE.keep1.TE.sig$type)
+
+ggplot(rna_TE.keep1.TE.sig, aes(log2FC_TE.u5_WT, DTL24h.u5_WT.FC)) +
+  geom_point(aes(color = type))+ ylim(c(-4, 4)) +
+  scale_size(range = c(0, 4)) +
+  scale_color_manual(limits = c('TE_down.RS_down','TE_down.RS_up','TE_down.RS_nc', 'TE_up.RS_up', 'TE_up.RS_down', 'TE_up.RS_nc'),
+                     values = c("#b4deec", "#7ab2d4", "#196eaf", "#f9e469" ,"#fdb96b", "#df352f")) +
+  theme(panel.grid = element_blank(), axis.text = element_text(color="black"), 
+        panel.background = element_rect(color = 'black', fill = 'transparent'),
+        legend.title = element_blank(), legend.background = element_blank(), legend.key = element_blank(),
+        legend.position =c(0.5,0.88) 
+  ) + guides(color=guide_legend(ncol = 2, byrow=F)) +
+  xlab(expression(Log[2]*"FC(TE)")) + ylab(expression(Log[2]*"FC(RS)"))
+
+#ggsave("Figure3C.pdf", width = 10, height = 10, units = "cm")
 
 ## venn diagram: DEGs and changed TE&Proteome in u5 mutants, Figure3D ####
 library(VennDiagram)
 
 # DTL24h RNAseq
-rna <- read.xlsx("../DTL24h_mRNAseq/DTL24h_WT_u5.merged_info.xlsx")
+rna <- read.xlsx("../2_DTL24h_mRNAseq/DTL24h_WT_u5.merged_info.xlsx")
 u5.DEGs <- subset(rna, abs(DTL24h.u5_WT.FC) > log2(1.5) & DTL24h.u5_WT.p < 0.05)
 u5.DEGs.up <- subset(u5.DEGs, DTL24h.u5_WT.FC > 0) # 460
 u5.DEGs.down <- subset(u5.DEGs, DTL24h.u5_WT.FC < 0) # 480
 
 # Translation efficiency
-FPKM.s.TE <- read.xlsx("../Polysome_seq/PolysomeSeq_TE_info.xlsx")
+FPKM.s.TE <- read.xlsx("../3_Polysome_seq/PolysomeSeq_TE_info.xlsx")
 # significantly changed TE
 u5.TE <- subset(FPKM.s.TE, pvalue < 0.05)
 u5.TE.down <- subset(u5.TE, log2FC_TE.u5_WT < 0)
 u5.TE.up <- subset(u5.TE, log2FC_TE.u5_WT > 0)
 
 # TMT-based proteome results
-prot <- read.xlsx("../Proteome/DTL24h_TMT_proteome.xlsx")
+prot <- read.xlsx("../4_Proteome/DTL24h_TMT_proteome.xlsx")
 colnames(prot)
 
 prot.u5.down <- subset(prot, `t.test_24h.p` < 0.05 & `DTL24h.u5/WT` < 0.88)
@@ -92,12 +207,12 @@ gl <- c("RPS1","GHS1", "PnsB2", "PnsB4", "PnsL4", "LHCB3", "LHCA4","FLU","FAD7",
         "CHLM", "RBCS1B", "ALB3")
 
 # RNAseq FPKM log2FC
-fpkm.DTL24 <- read.xlsx("../DTL24h_mRNAseq/DTL24h_WT_u5.merged_info.xlsx")
+fpkm.DTL24 <- read.xlsx("../2_DTL24h_mRNAseq/DTL24h_WT_u5.merged_info.xlsx")
 fpkm.DTL24$fpkm.ratio <- (fpkm.DTL24$FPKM.DTL24h.u5+1e-5)/(fpkm.DTL24$FPKM.DTL24h.WT+1e-5)
 fpkm.DTL24$fpkm.log2ratio <- log(fpkm.DTL24$fpkm.ratio, 2)
 
 # TMT proteome log2FC
-prot <- read.xlsx("../Proteome/DTL24h_TMT_proteome.xlsx")
+prot <- read.xlsx("../3_Proteome/DTL24h_TMT_proteome.xlsx")
 prot$TMT.log2ratio <- log(prot$`DTL24h.u5/WT`, 2)
 
 fpkm.prot.all <- inner_join(fpkm.DTL24, prot)
@@ -132,9 +247,9 @@ ggplot(gl.keep.plot, aes(x=symbol, y=value, fill=log2ratio)) +
         panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank()
   )
-ggsave("Figure3H.pdf", width = 10, height = 10, units = "cm")
+#ggsave("Figure3H.pdf", width = 10, height = 10, units = "cm")
 
-## Heatmap: time-series expression profiles of transcription and translation, Figure3I&J ####
+## Heatmap: time-series expression profiles of transcription and translation, Figure3N&O ####
 library(openxlsx)
 library(stringr)
 library(ComplexHeatmap)
@@ -234,77 +349,10 @@ p.g242.fpkm.rela1 <- draw(p.g242.fpkm.rela)
 gb.p.g242.fpkm.rela = grid.grabExpr(draw(p.g242.fpkm.rela))
 gb.p.g242.prot.rela = grid.grabExpr(draw(p.g242.prot))
 cowplot::plot_grid(gb.p.g242.fpkm.rela, gb.p.g242.prot.rela, ncol=2)
-ggsave("Figure3I&J.pdf", width=15, height = 10, units = "cm")
+#ggsave("Figure3N&O.pdf", width=15, height = 10, units = "cm")
 
 
-## Heatmap for U5 targets: DTL24h RNAseq and TMT_proteome, Figure S3A&E ####
-# U5 targets: RPS1, GHS1, LHCB3, PnsB2, PnsB4, PnsL4
-gl.c <- c("RPS1","GHS1","LHCB3","PnsB2","PnsB4","PnsL4")
-
-
-u5.t <- prot[prot$symbol %in% gl.c,]
-
-u5.t1 <- u5.t[,c("Gene.ID","symbol","DTL24h.u5/WT","t.test_24h.p",
-                 "Norm.DTL24h.WT_1","Norm.DTL24h.WT_2","Norm.DTL24h.WT_3",
-                 "Norm.DTL24h.u5_1","Norm.DTL24h.u5_2","Norm.DTL24h.u5_3")]
-colnames(u5.t1) <- str_replace(colnames(u5.t1),"Norm.","")
-colnames(u5.t1)[5:10] <- c("WT_R1","WT_R2","WT_R3","*u5-3 u5-4*_R1","*u5-3 u5-4*_R2","*u5-3 u5-4*_R3")
-
-# Create a matrix
-u5.t1.m <- u5.t1[,5:10]  %>% 
-  as.matrix()
-# assign rownames
-rownames(u5.t1.m) <- u5.t1$symbol
-
-# z-score
-u5.t1.m <- u5.t1.m %>% 
-  # transpose the matrix so genes are as columns
-  t() %>% 
-  # apply scalling to each column of the matrix (genes)
-  scale() %>% 
-  # transpose back so genes are as rows again
-  t()
-
-
-ht1 = Heatmap(u5.t1.m, name="z-score",show_row_names = T, 
-              cluster_rows = T, cluster_columns = F,
-              column_labels = gt_render(colnames(u5.t1)[5:10]), 
-              column_title = "Proteome") 
-
-# DTL24h RNAseq
-# sample normalized read counts
-nc <- read.csv("../DTL24h_mRNAseq/DTL24h.VST_DESeq2_normalized_counts_sample.csv")
-u5.t2 <- nc[nc$Gene.ID %in% u5.t1$Gene.ID,]
-u5.t2 <- inner_join(u5.t2, u5.t1[,c("Gene.ID","symbol")],by="Gene.ID")
-colnames(u5.t2)[2:7] <- c("WT_R1","WT_R2","WT_R3","*u5-3 u5-4*_R1","*u5-3 u5-4*_R2","*u5-3 u5-4*_R3")
-
-# Create a matrix
-u5.t2.m <- u5.t2[,2:7]  %>% 
-  as.matrix()
-# assign rownames
-rownames(u5.t2.m) <- u5.t2$symbol
-
-# z-score
-u5.t2.m <- u5.t2.m %>% 
-  # transpose the matrix so genes are as columns
-  t() %>% 
-  # apply scalling to each column of the matrix (genes)
-  scale() %>% 
-  # transpose back so genes are as rows again
-  t()
-
-ht2 =   Heatmap(u5.t2.m, name="z-score",show_row_names = T, 
-                cluster_rows = T, cluster_columns = F,
-                column_labels = gt_render(colnames(u5.t2)[2:7]),
-                column_title = "RNAseq")
-ht2 + ht1
-
-
-#pdf("FigureS3A&E.pdf",width = 15/2.54, height = 12/2.54)
-draw(ht2 + ht1, auto_adjust = FALSE)
-#dev.off()
-
-## Heatmap for U5 targets: time-series RNAseq and TMT_proteome, Figure S4A&B ####
+## Heatmap for U5 targets: time-series RNAseq and TMT_proteome, Figure S2C&D ####
 gl <- data.frame(Gene=c("AT1G64770_PnsB2","AT5G54270_LHCB3", 
                         "AT5G30510_RPS1","AT2G29550_TUB7"))
 gl$Gene.ID <- str_split_fixed(gl$Gene, "_", 2)[,1]
@@ -331,9 +379,9 @@ p <-  fpkm.u5.gl.rela[2:6] %>%  Heatmap(
   #width = unit(7, "cm"),
   #height = unit(9, "cm")
 )
-pdf("FigureS4A.pdf", height = 5/2.54, width = 12/2.54)
+#pdf("FigureS2C.pdf", height = 5/2.54, width = 12/2.54)
 p
-dev.off()
+#dev.off()
 
 
 U5.t.norm <- norm.Avg1.anno[norm.Avg1.anno$Gene.ID %in% 
@@ -358,6 +406,6 @@ p <- U5.t.plot[,c(1,3:6)]  %>%  Heatmap(
   border = T,
   show_row_names = T,row_names_gp = gpar(fontsize=11)
 )
-pdf("FigureS4B.pdf", height = 5/2.54, width = 12/2.54)
+#pdf("FigureS2D.pdf", height = 5/2.54, width = 12/2.54)
 p
-dev.off()
+#dev.off()
